@@ -1,0 +1,41 @@
+# cargo-deny configuration.
+#
+# Run locally with `cargo deny check all`, or `just audit`.
+
+[graph]
+all-features = true
+
+[advisories]
+# Fail on any known vulnerability or unmaintained crate. A scanner that ships
+# with a known RCE in a transitive dependency is not a security tool.
+yanked = "deny"
+ignore = []
+
+[licenses]
+# Permissive licences only, so that `rscan-core` stays embeddable.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Nothing here should ever pull in a TLS stack other than rustls: OpenSSL would
+# add a C build dependency to a tool that is meant to be a single static binary.
+deny = [
+    { name = "openssl" },
+    { name = "openssl-sys" },
+    { name = "native-tls" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

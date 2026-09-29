@@ -1,0 +1,504 @@
+# rscan service probe database
+#
+# This is rscan's own probe format. It is inspired by nmap-service-probes in
+# spirit -- send a payload, match the reply against patterns, extract a version
+# -- but it is a different, much smaller format with different data, written for
+# this project.
+#
+# Format
+# ------
+#   version           schema version of this file
+#   [[probe]]         one payload to send
+#     name            unique identifier
+#     protocol        "tcp" or "udp"
+#     payload         bytes to send, in rscan escape syntax (see below); an
+#                     empty payload means "connect and listen", i.e. a banner grab
+#     rarity          0-9. A probe only runs when rarity <= --version-intensity
+#     ports           ports this probe is tried against first
+#     read_timeout_ms how long to wait for a reply
+#   [[probe.match]]   one pattern to test the reply against
+#     service         service name to report
+#     pattern         regex, matched against RAW BYTES (not UTF-8)
+#     product         optional template, "$1" refers to capture group 1
+#     version         optional template
+#     info            optional template
+#     confidence      0-10, how sure the match is
+#
+# Escape syntax for `payload`: \r \n \t \0 \\ and \xNN. TOML literal strings
+# (single quotes) are used so that TOML does not touch the backslashes.
+#
+# Patterns are compiled with the `regex` crate in bytes mode with Unicode off,
+# so `.` is one byte and \xNN matches that byte exactly.
+
+version = 1
+
+# ---------------------------------------------------------------------------
+# The banner grab. Sends nothing and reads whatever the service volunteers.
+# ---------------------------------------------------------------------------
+[[probe]]
+name = "NULL"
+protocol = "tcp"
+payload = ''
+rarity = 1
+ports = []
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "ssh"
+  pattern = '^SSH-([\d.]+)-([^\r\n]+)'
+  product = "$2"
+  info = "protocol $1"
+  confidence = 10
+
+  [[probe.match]]
+  service = "ftp"
+  pattern = '^220[- ]([^\r\n]*FTP[^\r\n]*)'
+  product = "$1"
+  confidence = 9
+
+  [[probe.match]]
+  service = "ftp"
+  pattern = '^220[- ]([^\r\n]*)'
+  info = "$1"
+  confidence = 6
+
+  [[probe.match]]
+  service = "smtp"
+  pattern = '^220[- ][^\r\n]*?(ESMTP|SMTP)[ ]?([^\r\n]*)'
+  product = "$2"
+  confidence = 9
+
+  [[probe.match]]
+  service = "pop3"
+  pattern = '^\+OK[ ]?([^\r\n]*)'
+  info = "$1"
+  confidence = 8
+
+  [[probe.match]]
+  service = "imap"
+  pattern = '^\* OK[ ]?([^\r\n]*)'
+  info = "$1"
+  confidence = 8
+
+  [[probe.match]]
+  service = "nntp"
+  pattern = '^20[01][- ]([^\r\n]*)'
+  info = "$1"
+  confidence = 7
+
+  [[probe.match]]
+  service = "mysql"
+  pattern = '^.\x00\x00\x00\x0a([0-9][-_.0-9a-zA-Z]+)\x00'
+  product = "MySQL"
+  version = "$1"
+  confidence = 10
+
+  [[probe.match]]
+  service = "mysql"
+  pattern = '^.\x00\x00\x01\xff..(?s)(Host [^\x00]+ is not allowed[^\x00]*)'
+  product = "MySQL"
+  info = "$1"
+  confidence = 9
+
+  [[probe.match]]
+  service = "vnc"
+  pattern = '^RFB (\d{3}\.\d{3})'
+  product = "VNC"
+  version = "protocol $1"
+  confidence = 10
+
+  [[probe.match]]
+  service = "telnet"
+  pattern = '^\xff[\xfb-\xfe]'
+  product = "Telnet"
+  confidence = 9
+
+  [[probe.match]]
+  service = "irc"
+  pattern = '(?s)^:([^ ]+) NOTICE'
+  info = "$1"
+  confidence = 8
+
+  [[probe.match]]
+  service = "rsync"
+  pattern = '^@RSYNCD: ([\d.]+)'
+  product = "rsyncd"
+  version = "$1"
+  confidence = 10
+
+  [[probe.match]]
+  service = "postgresql"
+  pattern = '^E\x00\x00\x00.(?s).*(FATAL|SFATAL)'
+  product = "PostgreSQL"
+  confidence = 8
+
+# ---------------------------------------------------------------------------
+# HTTP, and everything that answers an HTTP request.
+# ---------------------------------------------------------------------------
+[[probe]]
+name = "GetRequest"
+protocol = "tcp"
+payload = 'GET / HTTP/1.0\r\n\r\n'
+rarity = 1
+ports = [80, 81, 280, 443, 591, 593, 832, 981, 1010, 1311, 2375, 2376, 2379, 3000, 4443, 4444, 5000, 5601, 5984, 6443, 7001, 8000, 8008, 8009, 8080, 8081, 8086, 8088, 8090, 8181, 8443, 8834, 8880, 8888, 8983, 9000, 9090, 9091, 9200, 9443, 10000, 10250, 15672, 50070]
+read_timeout_ms = 3000
+
+  [[probe.match]]
+  service = "http"
+  pattern = '(?s)^HTTP/1\.[01] \d\d\d[^\r\n]*\r\n.*?[Ss]erver:[ ]?([^\r\n]+)'
+  product = "$1"
+  confidence = 10
+
+  [[probe.match]]
+  service = "elasticsearch"
+  pattern = '(?s)^HTTP/1\.[01] 200.*"cluster_name"'
+  product = "Elasticsearch"
+  confidence = 9
+
+  [[probe.match]]
+  service = "http"
+  pattern = '^HTTP/1\.[01] \d\d\d'
+  confidence = 8
+
+  [[probe.match]]
+  service = "http"
+  pattern = '^<[Hh][Tt][Mm][Ll]'
+  info = "no status line"
+  confidence = 5
+
+# ---------------------------------------------------------------------------
+# Key-value and document stores.
+# ---------------------------------------------------------------------------
+[[probe]]
+name = "RedisPing"
+protocol = "tcp"
+payload = '*1\r\n$4\r\nPING\r\n'
+rarity = 2
+ports = [6379, 6380, 16379]
+read_timeout_ms = 1500
+
+  [[probe.match]]
+  service = "redis"
+  pattern = '^\+PONG'
+  product = "Redis"
+  confidence = 10
+
+  [[probe.match]]
+  service = "redis"
+  pattern = '^-(NOAUTH|DENIED|ERR operation not permitted)'
+  product = "Redis"
+  info = "authentication required"
+  confidence = 10
+
+[[probe]]
+name = "MemcachedVersion"
+protocol = "tcp"
+payload = 'version\r\n'
+rarity = 3
+ports = [11211]
+read_timeout_ms = 1500
+
+  [[probe.match]]
+  service = "memcached"
+  pattern = '^VERSION ([\d.]+)'
+  product = "Memcached"
+  version = "$1"
+  confidence = 10
+
+[[probe]]
+name = "MongoDBIsMaster"
+protocol = "tcp"
+payload = ':\0\0\0\0\0\0\0\0\0\0\0\xd4\x07\0\0\0\0\0\0admin.$cmd\0\0\0\0\0\x01\0\0\0\x13\0\0\0\x10isMaster\0\x01\0\0\0\0'
+rarity = 4
+ports = [27017, 27018, 27019]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "mongodb"
+  pattern = '(?s)(maxWireVersion|isWritablePrimary|ismaster)'
+  product = "MongoDB"
+  confidence = 9
+
+  [[probe.match]]
+  service = "mongodb"
+  pattern = '(?s)(command not supported|unauthorized)'
+  product = "MongoDB"
+  info = "authentication required"
+  confidence = 7
+
+[[probe]]
+name = "PostgreSQLStartup"
+protocol = "tcp"
+payload = '\0\0\0\x14\0\x03\0\0user\0rscan\0\0'
+rarity = 4
+ports = [5432, 5433]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "postgresql"
+  pattern = '(?s)^E\x00\x00\x00.*?(FATAL|SFATAL)'
+  product = "PostgreSQL"
+  confidence = 10
+
+  [[probe.match]]
+  service = "postgresql"
+  pattern = '^R\x00\x00\x00[\x08\x0c\x17\x1c]'
+  product = "PostgreSQL"
+  info = "authentication requested"
+  confidence = 10
+
+# ---------------------------------------------------------------------------
+# Windows and remote desktop.
+# ---------------------------------------------------------------------------
+[[probe]]
+name = "RDPCookie"
+protocol = "tcp"
+payload = '\x03\0\0\x13\x0e\xe0\0\0\0\0\0\x01\0\x08\0\x03\0\0\0'
+rarity = 4
+ports = [3389, 3388, 33890]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "ms-wbt-server"
+  pattern = '^\x03\x00\x00.\x0e\xd0'
+  product = "Microsoft Terminal Services"
+  confidence = 10
+
+[[probe]]
+name = "SMBNegotiate"
+protocol = "tcp"
+payload = '\0\0\0/\xffSMBr\0\0\0\0\x18S\xc8\0\0\0\0\0\0\0\0\0\0\0\0\0\0\xfe\xff\0\0\0\0\0\x0c\0\x02NT LM 0.12\0'
+rarity = 4
+ports = [139, 445]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "smb"
+  pattern = '(?s)^\x00...\xfeSMB'
+  product = "SMBv2"
+  confidence = 10
+
+  [[probe.match]]
+  service = "netbios-ssn"
+  pattern = '(?s)^\x00...\xffSMB'
+  product = "SMBv1"
+  info = "SMBv1 is enabled"
+  confidence = 10
+
+# ---------------------------------------------------------------------------
+# DNS over TCP.
+# ---------------------------------------------------------------------------
+[[probe]]
+name = "DNSVersionBindTCP"
+protocol = "tcp"
+payload = '\0\x1e\x124\0\0\0\x01\0\0\0\0\0\0\x07version\x04bind\0\0\x10\0\x03'
+rarity = 3
+ports = [53, 5353]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "domain"
+  pattern = '(?s)^..\x124[\x80-\x87].*\x07version\x04bind\x00.*\x00.(.{1,64})$'
+  product = "DNS"
+  version = "$1"
+  confidence = 9
+
+  [[probe.match]]
+  service = "domain"
+  pattern = '^..\x124[\x80-\x87]'
+  product = "DNS"
+  confidence = 10
+
+# ---------------------------------------------------------------------------
+# Line protocols that need a nudge.
+# ---------------------------------------------------------------------------
+[[probe]]
+name = "GenericLines"
+protocol = "tcp"
+payload = '\r\n\r\n'
+rarity = 5
+ports = []
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "smtp"
+  pattern = '(?s)^50[015][- ]'
+  product = "SMTP"
+  confidence = 6
+
+  [[probe.match]]
+  service = "pop3"
+  pattern = '^-ERR'
+  product = "POP3"
+  confidence = 6
+
+  [[probe.match]]
+  service = "imap"
+  pattern = '^\* BAD'
+  product = "IMAP"
+  confidence = 6
+
+[[probe]]
+name = "Help"
+protocol = "tcp"
+payload = 'HELP\r\n'
+rarity = 6
+ports = [25, 110, 143, 465, 587, 993, 995]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "smtp"
+  pattern = '^214[- ]([^\r\n]*)'
+  info = "$1"
+  confidence = 7
+
+# ---------------------------------------------------------------------------
+# UDP probes. Each one is the smallest well-formed request the service will
+# answer, because an unanswered UDP probe is indistinguishable from a filtered
+# port and every wasted probe costs accuracy.
+# ---------------------------------------------------------------------------
+[[probe]]
+name = "DNSVersionBind"
+protocol = "udp"
+payload = '\x124\0\0\0\x01\0\0\0\0\0\0\x07version\x04bind\0\0\x10\0\x03'
+rarity = 1
+ports = [53, 5353]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "domain"
+  pattern = '^\x124[\x80-\x87]'
+  product = "DNS"
+  confidence = 10
+
+[[probe]]
+name = "SNMPv2cPublic"
+protocol = "udp"
+payload = '0)\x02\x01\x01\x04\x06public\xa0\x1c\x02\x04\n\x0b\x0c\r\x02\x01\0\x02\x01\00\x0e0\x0c\x06\x08+\x06\x01\x02\x01\x01\x01\0\x05\0'
+rarity = 1
+ports = [161, 162, 8161]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "snmp"
+  pattern = '(?s)^0.\x02\x01\x01\x04\x06public.*\x06\x08\x2b\x06\x01\x02\x01\x01\x01\x00\x04.([\x20-\x7e]{4,200})'
+  product = "SNMPv2c"
+  info = "$1"
+  confidence = 10
+
+  [[probe.match]]
+  service = "snmp"
+  pattern = '^0.\x02\x01[\x00\x01\x03]\x04'
+  product = "SNMP"
+  confidence = 9
+
+[[probe]]
+name = "NTPClient"
+protocol = "udp"
+payload = '\x1b\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
+rarity = 1
+ports = [123]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "ntp"
+  pattern = '^[\x04\x0c\x14\x1c\x24\x2c\x34\x3c\xc4\xcc\xd4\xdc\xe4\xec]'
+  product = "NTP"
+  confidence = 9
+
+[[probe]]
+name = "NetBIOSNodeStatus"
+protocol = "udp"
+payload = '\x80\xf0\0\x10\0\x01\0\0\0\0\0\0 CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\0\0!\0\x01'
+rarity = 1
+ports = [137]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "netbios-ns"
+  pattern = '^\x80\xf0[\x80-\x8f]'
+  product = "NetBIOS name service"
+  confidence = 10
+
+[[probe]]
+name = "IKEMainMode"
+protocol = "udp"
+payload = '\x01\x02\x03\x04\x05\x06\x07\x08\0\0\0\0\0\0\0\0\x01\x10\x02\0\0\0\0\0\0\0\0T\0\0\08\0\0\0\x01\0\0\0\x01\0\0\0,\x01\x01\0\x01\0\0\0$\x01\x01\0\0\x80\x01\0\x01\x80\x02\0\x02\x80\x03\0\x01\x80\x04\0\x02\x80\x0b\0\x01\0\x0c\0\x04\0\0p\x80'
+rarity = 2
+ports = [500, 4500]
+read_timeout_ms = 2500
+
+  [[probe.match]]
+  service = "isakmp"
+  pattern = '(?s)^.{16}[\x01\x0b][\x10\x20]'
+  product = "IKE"
+  confidence = 9
+
+[[probe]]
+name = "MemcachedUDPVersion"
+protocol = "udp"
+payload = '\0\x01\0\0\0\x01\0\0version\r\n'
+rarity = 2
+ports = [11211]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "memcached"
+  pattern = '(?s)VERSION ([\d.]+)'
+  product = "Memcached"
+  version = "$1"
+  confidence = 10
+
+[[probe]]
+name = "MDNSServiceEnum"
+protocol = "udp"
+payload = '\0\0\0\0\0\x01\0\0\0\0\0\0\t_services\x07_dns-sd\x04_udp\x05local\0\0\x0c\0\x01'
+rarity = 2
+ports = [5353]
+read_timeout_ms = 2500
+
+  [[probe.match]]
+  service = "mdns"
+  pattern = '(?s)^\x00.[\x80-\x87].*_dns-sd'
+  product = "mDNS"
+  confidence = 10
+
+  [[probe.match]]
+  service = "mdns"
+  pattern = '^\x00.[\x80-\x87]'
+  product = "mDNS"
+  confidence = 8
+
+[[probe]]
+name = "SSDPDiscover"
+protocol = "udp"
+payload = 'M-SEARCH * HTTP/1.1\r\nHOST:239.255.255.250:1900\r\nMAN:"ssdp:discover"\r\nMX:1\r\nST:ssdp:all\r\n\r\n'
+rarity = 3
+ports = [1900]
+read_timeout_ms = 2500
+
+  [[probe.match]]
+  service = "upnp"
+  pattern = '(?s)^HTTP/1\.1 200[^\r\n]*\r\n.*?SERVER:[ ]?([^\r\n]+)'
+  product = "$1"
+  confidence = 10
+
+  [[probe.match]]
+  service = "upnp"
+  pattern = '^HTTP/1\.1 200'
+  product = "UPnP"
+  confidence = 9
+
+[[probe]]
+name = "RPCPortmapDump"
+protocol = "udp"
+payload = 'r\xfe\x1d\x13\0\0\0\0\0\0\0\x02\0\x01\x86\xa0\0\0\0\x02\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
+rarity = 3
+ports = [111]
+read_timeout_ms = 2000
+
+  [[probe.match]]
+  service = "rpcbind"
+  pattern = '^r\xfe\x1d\x13\x00\x00\x00\x01'
+  product = "portmapper"
+  confidence = 10

@@ -1,0 +1,134 @@
+<!--
+  Subset of nmap's DTD covering exactly the elements rscan emits.
+
+  Vendored so that the nmap-XML output can be validated in CI without a network
+  fetch and without depending on a system xmllint. The declarations below are
+  copied in structure from nmap's own nmap.dtd; elements rscan never writes
+  (os, trace, script, distance, uptime, tcpsequence, …) are omitted, which is
+  safe because omitting an optional element can only make a document that
+  validates here also validate against the full DTD, never the reverse.
+
+  Note the `state` enumeration: nmap writes "open|filtered" as a single
+  attribute value, and its DTD lists it as such. Enumerated values here are
+  separated by " | " (space-pipe-space), so "open|filtered" is one value.
+-->
+
+<!ELEMENT nmaprun (scaninfo*, verbose, debugging, host*, runstats)>
+<!ATTLIST nmaprun
+    scanner            (nmap)   #REQUIRED
+    args               CDATA    #IMPLIED
+    start              CDATA    #IMPLIED
+    startstr           CDATA    #IMPLIED
+    version            CDATA    #REQUIRED
+    xmloutputversion   CDATA    #REQUIRED
+>
+
+<!ELEMENT scaninfo EMPTY>
+<!ATTLIST scaninfo
+    type          (ack | connect | null | syn | udp | window)   #REQUIRED
+    protocol      (ip | tcp | udp | sctp)                       #REQUIRED
+    numservices   CDATA                                         #REQUIRED
+    services      CDATA                                         #REQUIRED
+>
+
+<!ELEMENT verbose EMPTY>
+<!ATTLIST verbose level CDATA #IMPLIED>
+
+<!ELEMENT debugging EMPTY>
+<!ATTLIST debugging level CDATA #IMPLIED>
+
+<!ELEMENT host (status, address+, hostnames?, ports?, times?)>
+<!ATTLIST host
+    starttime   CDATA   #IMPLIED
+    endtime     CDATA   #IMPLIED
+    comment     CDATA   #IMPLIED
+>
+
+<!ELEMENT status EMPTY>
+<!ATTLIST status
+    state        (up | down | unknown | skipped)   #REQUIRED
+    reason       CDATA                             #REQUIRED
+    reason_ttl   CDATA                             #REQUIRED
+>
+
+<!ELEMENT address EMPTY>
+<!ATTLIST address
+    addr       CDATA                    #REQUIRED
+    addrtype   (ipv4 | ipv6 | mac)      #REQUIRED
+    vendor     CDATA                    #IMPLIED
+>
+
+<!ELEMENT hostnames (hostname*)>
+
+<!ELEMENT hostname EMPTY>
+<!ATTLIST hostname
+    name   CDATA          #IMPLIED
+    type   (user | PTR)   #IMPLIED
+>
+
+<!ELEMENT ports (extraports*, port*)>
+
+<!ELEMENT extraports (extrareasons*)>
+<!ATTLIST extraports
+    state   CDATA   #REQUIRED
+    count   CDATA   #REQUIRED
+>
+
+<!ELEMENT extrareasons EMPTY>
+<!ATTLIST extrareasons
+    reason   CDATA   #REQUIRED
+    count    CDATA   #REQUIRED
+>
+
+<!ELEMENT port (state, service?)>
+<!ATTLIST port
+    protocol   (ip | tcp | udp | sctp)   #REQUIRED
+    portid     CDATA                     #REQUIRED
+>
+
+<!ELEMENT state EMPTY>
+<!ATTLIST state
+    state        (open | closed | filtered | unfiltered | open|filtered | closed|filtered)   #REQUIRED
+    reason       CDATA                                                                      #REQUIRED
+    reason_ttl   CDATA                                                                      #REQUIRED
+>
+
+<!ELEMENT service (cpe*)>
+<!ATTLIST service
+    name         CDATA               #REQUIRED
+    conf         CDATA               #REQUIRED
+    method       (table | probed)    #REQUIRED
+    version      CDATA               #IMPLIED
+    product      CDATA               #IMPLIED
+    extrainfo    CDATA               #IMPLIED
+    tunnel       (ssl)               #IMPLIED
+    servicefp    CDATA               #IMPLIED
+    hostname     CDATA               #IMPLIED
+>
+
+<!ELEMENT cpe (#PCDATA)>
+
+<!ELEMENT times EMPTY>
+<!ATTLIST times
+    srtt     CDATA   #REQUIRED
+    rttvar   CDATA   #REQUIRED
+    to       CDATA   #REQUIRED
+>
+
+<!ELEMENT runstats (finished, hosts)>
+
+<!ELEMENT finished EMPTY>
+<!ATTLIST finished
+    time      CDATA              #REQUIRED
+    timestr   CDATA              #IMPLIED
+    elapsed   CDATA              #IMPLIED
+    summary   CDATA              #IMPLIED
+    exit      (error | success)  #IMPLIED
+>
+
+<!ELEMENT hosts EMPTY>
+<!ATTLIST hosts
+    up      CDATA   #IMPLIED
+    down    CDATA   #IMPLIED
+    total   CDATA   #IMPLIED
+>

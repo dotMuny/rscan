@@ -1,0 +1,44 @@
+[package]
+name = "rscan-cli"
+description = "rscan: a fast, adaptive asynchronous port scanner with service detection"
+readme = "../../README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+name = "rscan_cli"
+path = "src/lib.rs"
+bench = false
+
+[[bin]]
+name = "rscan"
+path = "src/main.rs"
+bench = false
+
+[dependencies]
+rscan-core.workspace = true
+
+anyhow.workspace = true
+clap.workspace = true
+csv.workspace = true
+futures.workspace = true
+indicatif.workspace = true
+owo-colors.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tokio-stream.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+quick-xml.workspace = true
+regex.workspace = true
+futures.workspace = true
+rscan-core.workspace = true
+tokio = { workspace = true, features = ["full"] }

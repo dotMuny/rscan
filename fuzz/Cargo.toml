@@ -1,0 +1,59 @@
+[package]
+name = "rscan-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Its own workspace: cargo-fuzz builds with a different profile and sanitizer
+# flags, and mixing that into the main workspace's lockfile causes needless
+# rebuilds.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rscan-core = { path = "../crates/rscan-core" }
+
+[[bin]]
+name = "target_parse"
+path = "fuzz_targets/target_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "port_parse"
+path = "fuzz_targets/port_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "probe_db"
+path = "fuzz_targets/probe_db.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "probe_payload"
+path = "fuzz_targets/probe_payload.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "top_ports_table"
+path = "fuzz_targets/top_ports_table.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "packet_parse"
+path = "fuzz_targets/packet_parse.rs"
+test = false
+doc = false
+bench = false
